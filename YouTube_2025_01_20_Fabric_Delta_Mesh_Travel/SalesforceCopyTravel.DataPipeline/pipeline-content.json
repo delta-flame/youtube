@@ -1,0 +1,79 @@
+{
+  "properties": {
+    "activities": [
+      {
+        "name": "Copy Travel",
+        "type": "Copy",
+        "dependsOn": [],
+        "policy": {
+          "timeout": "0.12:00:00",
+          "retry": 0,
+          "retryIntervalInSeconds": 30,
+          "secureOutput": false,
+          "secureInput": false
+        },
+        "typeProperties": {
+          "source": {
+            "type": "SalesforceSource",
+            "query": "SELECT CreatedDate, Employee__c, Employee__r.Name, Flight__c, Id, IsDeleted, LastModifiedDate, Name, Flight__r.external_id__c\nFROM Travel_Booking__c\n\n\n",
+            "includeDeletedObjects": false,
+            "datasetSettings": {
+              "annotations": [],
+              "type": "SalesforceObject",
+              "schema": [],
+              "typeProperties": {
+                "objectApiName": "Travel_Booking__c"
+              },
+              "externalReferences": {
+                "connection": "***"
+              }
+            }
+          },
+          "sink": {
+            "type": "LakehouseTableSink",
+            "tableActionOption": "OverwriteSchema",
+            "partitionOption": "None",
+            "datasetSettings": {
+              "annotations": [],
+              "linkedService": {
+                "name": "raw_salesforce",
+                "properties": {
+                  "annotations": [],
+                  "type": "Lakehouse",
+                  "typeProperties": {
+                    "workspaceId": "***",
+                    "artifactId": "***",
+                    "rootFolder": "Tables"
+                  }
+                }
+              },
+              "type": "LakehouseTable",
+              "schema": [],
+              "typeProperties": {
+                "table": {
+                  "value": "@variables('table_name')",
+                  "type": "Expression"
+                }
+              }
+            }
+          },
+          "enableStaging": false,
+          "translator": {
+            "type": "TabularTranslator",
+            "typeConversion": true,
+            "typeConversionSettings": {
+              "allowDataTruncation": true,
+              "treatBooleanAsNumber": false
+            }
+          }
+        }
+      }
+    ],
+    "variables": {
+      "table_name": {
+        "type": "String",
+        "defaultValue": "Travel_Booking__c"
+      }
+    }
+  }
+}

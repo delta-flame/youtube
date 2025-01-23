@@ -1,0 +1,414 @@
+{
+  "properties": {
+    "activities": [
+      {
+        "type": "Lookup",
+        "typeProperties": {
+          "source": {
+            "type": "RestSource",
+            "requestMethod": "POST",
+            "requestBody": "client_id=***&client_secret=***8&grant_type=client_credentials",
+            "additionalHeaders": {
+              "Content-Type": "application/x-www-form-urlencoded"
+            },
+            "httpRequestTimeout": "00:01:40",
+            "requestInterval": "00.00:00:00.010"
+          },
+          "datasetSettings": {
+            "type": "RestResource",
+            "typeProperties": {
+              "relativeUrl": "/v1/security/oauth2/token"
+            },
+            "schema": [],
+            "externalReferences": {
+              "connection": "***"
+            },
+            "annotations": []
+          },
+          "firstRowOnly": false
+        },
+        "policy": {
+          "timeout": "0.12:00:00",
+          "retry": 0,
+          "retryIntervalInSeconds": 30,
+          "secureInput": false,
+          "secureOutput": false
+        },
+        "name": "Get Auth Token",
+        "dependsOn": []
+      },
+      {
+        "type": "ForEach",
+        "typeProperties": {
+          "isSequential": true,
+          "items": {
+            "value": "@activity('Lookup City Pairs - From Hub').output.value",
+            "type": "Expression"
+          },
+          "activities": [
+            {
+              "type": "Copy",
+              "typeProperties": {
+                "source": {
+                  "type": "RestSource",
+                  "requestMethod": "GET",
+                  "additionalHeaders": {
+                    "Authorization": {
+                      "value": "@concat('Bearer ', variables('auth_token'))",
+                      "type": "Expression"
+                    }
+                  },
+                  "paginationRules": {
+                    "supportRFC5988": "true"
+                  },
+                  "httpRequestTimeout": "00:01:40",
+                  "requestInterval": "00.00:00:00.010",
+                  "additionalColumns": [
+                    {
+                      "name": "sub_query",
+                      "value": {
+                        "value": "@variables('sub_query')",
+                        "type": "Expression"
+                      }
+                    }
+                  ],
+                  "datasetSettings": {
+                    "type": "RestResource",
+                    "typeProperties": {
+                      "relativeUrl": {
+                        "value": "@variables('sub_query')",
+                        "type": "Expression"
+                      }
+                    },
+                    "schema": [],
+                    "externalReferences": {
+                      "connection": "***"
+                    },
+                    "annotations": []
+                  }
+                },
+                "sink": {
+                  "type": "JsonSink",
+                  "formatSettings": {
+                    "type": "JsonWriteSettings"
+                  },
+                  "storeSettings": {
+                    "type": "LakehouseWriteSettings"
+                  },
+                  "datasetSettings": {
+                    "type": "Json",
+                    "typeProperties": {
+                      "location": {
+                        "type": "LakehouseLocation",
+                        "folderPath": {
+                          "value": "@variables('working_dir')",
+                          "type": "Expression"
+                        },
+                        "fileName": {
+                          "value": "@concat(item().FromAirportCode,item().ToAirportCode,'_',guid(),'.json')",
+                          "type": "Expression"
+                        }
+                      }
+                    },
+                    "schema": {},
+                    "linkedService": {
+                      "name": "temp",
+                      "properties": {
+                        "type": "Lakehouse",
+                        "typeProperties": {
+                          "artifactId": "***",
+                          "workspaceId": "00000000-0000-0000-0000-000000000000",
+                          "rootFolder": "Files"
+                        },
+                        "annotations": []
+                      }
+                    },
+                    "annotations": []
+                  }
+                },
+                "enableStaging": false,
+                "parallelCopies": 1
+              },
+              "policy": {
+                "timeout": "0.12:00:00",
+                "retry": 0,
+                "retryIntervalInSeconds": 30,
+                "secureInput": false,
+                "secureOutput": false
+              },
+              "name": "Get Flight Options",
+              "dependsOn": [
+                {
+                  "activity": "Set variable query",
+                  "dependencyConditions": ["Succeeded"]
+                }
+              ]
+            },
+            {
+              "type": "SetVariable",
+              "typeProperties": {
+                "variableName": "sub_query",
+                "value": {
+                  "value": "@concat('/v2/shopping/flight-offers?originLocationCode=',item().FromAirportCode,'&destinationLocationCode=',item().ToAirportCode,'&departureDate=',variables('fetch_date'),'&adults=1&nonStop=false&currencyCode=USD&max=250')\n\n\n",
+                  "type": "Expression"
+                }
+              },
+              "policy": {
+                "secureInput": false,
+                "secureOutput": false
+              },
+              "name": "Set variable query",
+              "dependsOn": []
+            }
+          ]
+        },
+        "name": "ForEach1",
+        "dependsOn": [
+          {
+            "activity": "Lookup City Pairs - From Hub",
+            "dependencyConditions": ["Succeeded"]
+          },
+          {
+            "activity": "Set variable - Auth Token",
+            "dependencyConditions": ["Succeeded"]
+          },
+          {
+            "activity": "Set working dir",
+            "dependencyConditions": ["Succeeded"]
+          }
+        ]
+      },
+      {
+        "type": "Lookup",
+        "typeProperties": {
+          "source": {
+            "type": "AzureSqlSource",
+            "sqlReaderQuery": "select FromAirportCode, ToAirportCode \nfrom dbo.travel_city_pairs \nwhere IsDeleted = 0 ",
+            "partitionOption": "None",
+            "queryTimeout": "02:00:00"
+          },
+          "datasetSettings": {
+            "type": "AzureSqlTable",
+            "typeProperties": {
+              "database": "hub"
+            },
+            "schema": [],
+            "externalReferences": {
+              "connection": "***"
+            },
+            "annotations": []
+          },
+          "firstRowOnly": false
+        },
+        "policy": {
+          "timeout": "0.12:00:00",
+          "retry": 0,
+          "retryIntervalInSeconds": 30,
+          "secureInput": false,
+          "secureOutput": false
+        },
+        "name": "Lookup City Pairs - From Hub",
+        "dependsOn": [
+          {
+            "activity": "Set fetch date",
+            "dependencyConditions": ["Succeeded"]
+          }
+        ]
+      },
+      {
+        "type": "SetVariable",
+        "typeProperties": {
+          "variableName": "auth_token",
+          "value": {
+            "value": "@activity('Get Auth Token').output.value[0].access_token\n",
+            "type": "Expression"
+          }
+        },
+        "policy": {
+          "secureInput": false,
+          "secureOutput": false
+        },
+        "name": "Set variable - Auth Token",
+        "dependsOn": [
+          {
+            "activity": "Get Auth Token",
+            "dependencyConditions": ["Succeeded"]
+          }
+        ]
+      },
+      {
+        "type": "SetVariable",
+        "typeProperties": {
+          "variableName": "working_dir",
+          "value": {
+            "value": "@concat(pipeline().PipelineName,'/',variables('fetch_date'),'_',pipeline().RunId)",
+            "type": "Expression"
+          }
+        },
+        "policy": {
+          "secureInput": false,
+          "secureOutput": false
+        },
+        "name": "Set working dir",
+        "dependsOn": [
+          {
+            "activity": "Set fetch date",
+            "dependencyConditions": ["Succeeded"]
+          }
+        ]
+      },
+      {
+        "type": "Copy",
+        "typeProperties": {
+          "source": {
+            "type": "JsonSource",
+            "formatSettings": {
+              "type": "JsonReadSettings"
+            },
+            "additionalColumns": [
+              {
+                "name": "inserted_time_utc_raw",
+                "value": {
+                  "value": "@formatDateTime(utcNow())",
+                  "type": "Expression"
+                }
+              },
+              {
+                "name": "inserted_by_run_id_raw",
+                "value": {
+                  "value": "@pipeline().RunId",
+                  "type": "Expression"
+                }
+              },
+              {
+                "name": "processed_by_raw",
+                "value": {
+                  "value": "@pipeline().PipelineName",
+                  "type": "Expression"
+                }
+              }
+            ],
+            "storeSettings": {
+              "type": "LakehouseReadSettings",
+              "recursive": false,
+              "enablePartitionDiscovery": false
+            },
+            "datasetSettings": {
+              "type": "Json",
+              "typeProperties": {
+                "location": {
+                  "type": "LakehouseLocation",
+                  "folderPath": {
+                    "value": "@variables('working_dir')",
+                    "type": "Expression"
+                  }
+                }
+              },
+              "schema": {},
+              "linkedService": {
+                "name": "temp",
+                "properties": {
+                  "type": "Lakehouse",
+                  "typeProperties": {
+                    "artifactId": "***",
+                    "workspaceId": "00000000-0000-0000-0000-000000000000",
+                    "rootFolder": "Files"
+                  },
+                  "annotations": []
+                }
+              },
+              "annotations": []
+            }
+          },
+          "sink": {
+            "type": "LakehouseTableSink",
+            "tableActionOption": "Append",
+            "partitionOption": "None",
+            "datasetSettings": {
+              "type": "LakehouseTable",
+              "typeProperties": {
+                "table": "flight_options"
+              },
+              "schema": [],
+              "linkedService": {
+                "name": "raw_flightdata",
+                "properties": {
+                  "type": "Lakehouse",
+                  "typeProperties": {
+                    "artifactId": "***",
+                    "workspaceId": "***",
+                    "rootFolder": "Tables"
+                  },
+                  "annotations": []
+                }
+              },
+              "annotations": []
+            }
+          },
+          "translator": {
+            "type": "TabularTranslator",
+            "typeConversion": true,
+            "typeConversionSettings": {
+              "allowDataTruncation": false,
+              "treatBooleanAsNumber": false
+            },
+            "columnFlattenSettings": {
+              "treatArrayAsString": false,
+              "treatStructAsString": true
+            }
+          },
+          "enableStaging": false
+        },
+        "policy": {
+          "timeout": "0.12:00:00",
+          "retry": 0,
+          "retryIntervalInSeconds": 30,
+          "secureInput": false,
+          "secureOutput": false
+        },
+        "name": "Copy write to raw",
+        "dependsOn": [
+          {
+            "activity": "ForEach1",
+            "dependencyConditions": ["Succeeded"]
+          }
+        ]
+      },
+      {
+        "type": "SetVariable",
+        "typeProperties": {
+          "variableName": "fetch_date",
+          "value": {
+            "value": "@formatDateTime(adddays(startOfDay(utcNow()),21),'yyyy-MM-dd')\n",
+            "type": "Expression"
+          }
+        },
+        "policy": {
+          "secureInput": false,
+          "secureOutput": false
+        },
+        "name": "Set fetch date",
+        "dependsOn": []
+      }
+    ],
+    "variables": {
+      "auth_token": {
+        "type": "String",
+        "defaultValue": "_"
+      },
+      "working_dir": {
+        "type": "String",
+        "defaultValue": "_"
+      },
+      "sub_query": {
+        "type": "String",
+        "defaultValue": "_"
+      },
+      "fetch_date": {
+        "type": "String",
+        "defaultValue": "_"
+      }
+    },
+    "concurrency": 1
+  }
+}
